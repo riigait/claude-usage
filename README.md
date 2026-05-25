@@ -37,7 +37,7 @@ It is useful when you want to:
 - Optional `CLAUDE_ORG_ID` override for accounts where auto-detection fails.
 - Timestamped JSON history under your home directory.
 - Optional CustomTkinter desktop widget.
-- Windows build script for creating a local executable widget.
+- Windows build script for creating local checker and widget executables.
 - No API key required.
 
 ## Requirements
@@ -98,7 +98,7 @@ dist\ClaudeUsageWidget.exe
 
 It signs both files with a local self-signed certificate and attempts to add Windows Defender exclusions for those executable paths. Run the checker once first so you can log in, then open the widget.
 
-Note: the checker executable still uses Playwright Chromium. The build script installs Chromium on the build machine, and a fresh desktop may need `playwright install chromium` or the full Playwright browser cache copied/installed before first use.
+Note: the checker executable still uses Playwright Chromium. The build script installs Chromium on the build machine. On a fresh desktop, Chromium must also exist in that user's Playwright browser cache at `%LOCALAPPDATA%\ms-playwright`; the simplest path is installing Python dependencies and running `playwright install chromium` once before launching the executable.
 
 ## Manual Org ID
 
@@ -168,7 +168,9 @@ check_usage.py              Terminal usage checker
 widget.py                   Desktop widget
 launch-widget.bat           Windows launcher for the widget
 build.ps1                   Windows executable build/sign helper
+add-defender-exclusion.ps1  Optional Defender exclusion helper for built executables
 requirements.txt            Python dependencies
+check_usage.spec            PyInstaller spec for the checker
 widget.spec                 PyInstaller spec
 version_info.txt            Windows executable metadata
 ```
