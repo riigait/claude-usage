@@ -1,14 +1,25 @@
-# Run this once as Administrator to add Defender exclusion for the widget exe.
-# Right-click this file -> "Run with PowerShell" (then approve UAC prompt).
+#Requires -Version 5.1
+# Run as Administrator to add Defender exclusions for the built executables.
 
-$EXE_PATH = Join-Path $PSScriptRoot "dist\ClaudeUsageWidget.exe"
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
 
-if (-not (Test-Path $EXE_PATH)) {
-    Write-Host "Exe not found at $EXE_PATH - run build.ps1 first." -ForegroundColor Red
+$exePaths = @(
+    (Join-Path $PSScriptRoot "dist\ClaudeUsageChecker.exe"),
+    (Join-Path $PSScriptRoot "dist\ClaudeUsageWidget.exe")
+)
+
+$missing = $exePaths | Where-Object { -not (Test-Path $_) }
+if ($missing) {
+    Write-Host "Missing executable(s). Run build.ps1 first:" -ForegroundColor Red
+    $missing | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     pause
     exit 1
 }
 
-Add-MpPreference -ExclusionPath $EXE_PATH
-Write-Host "Defender exclusion added for: $EXE_PATH" -ForegroundColor Green
+foreach ($path in $exePaths) {
+    Add-MpPreference -ExclusionPath $path
+    Write-Host "Defender exclusion added for: $path" -ForegroundColor Green
+}
+
 pause
