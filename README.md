@@ -6,6 +6,10 @@ Claude Usage Checker is a small Python tool that opens Claude in Playwright, reu
 
 > This project is unofficial and is not affiliated with Anthropic.
 
+## Install Guides
+
+- [Windows, macOS, and Ubuntu Desktop setup](INSTALL_OS.md)
+
 ## Why This Exists
 
 Claude's usage limits matter most when you are deep in a work session. This tool gives you a fast local check without manually opening settings, clicking around, or guessing how close you are to the next reset.
