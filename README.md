@@ -42,6 +42,8 @@ It is useful when you want to:
 
 ## Requirements
 
+For full Windows, macOS, and Ubuntu Desktop setup instructions, see [INSTALL_OS.md](INSTALL_OS.md).
+
 - Python 3.10 or newer
 - A Claude.ai account
 - Chromium installed by Playwright
