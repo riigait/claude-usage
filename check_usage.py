@@ -1,70 +1,68 @@
 #!/usr/bin/env python3
 """
 Claude Usage Checker
-Uses your existing claude.ai browser session to fetch usage stats.
-Only logs in once — session is saved in a persistent browser profile.
+
+Uses your local Claude.ai browser session to fetch usage stats.
+The first run opens a browser for login; later runs reuse the saved profile.
 """
 
-from playwright.sync_api import sync_playwright
-from pathlib import Path
-from datetime import datetime, timezone
+from __future__ import annotations
+
 import json
 import os
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
-# ── Config ────────────────────────────────────────────────────────────────────
+from playwright.sync_api import Playwright, sync_playwright
+
+
 PROFILE_DIR = Path.home() / ".claude-usage" / "browser-profile"
-OUTPUT_DIR  = Path.home() / ".claude-usage" / "history"
-ORG_OVERRIDE = os.getenv("CLAUDE_ORG_ID", "")   # optional: set in .env
+OUTPUT_DIR = Path.home() / ".claude-usage" / "history"
+ORG_OVERRIDE = os.getenv("CLAUDE_ORG_ID", "")
+USAGE_URL = "https://claude.ai/settings/usage"
 
-# ── ANSI colors (no extra deps) ───────────────────────────────────────────────
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
-DIM    = "\033[2m"
-GREEN  = "\033[32m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+GREEN = "\033[32m"
 YELLOW = "\033[33m"
-RED    = "\033[31m"
-CYAN   = "\033[36m"
-WHITE  = "\033[97m"
-
-def c(text, *codes): return "".join(codes) + str(text) + RESET
+RED = "\033[31m"
+CYAN = "\033[36m"
+WHITE = "\033[97m"
 
 
-# ── Progress bar ──────────────────────────────────────────────────────────────
+def color(text: object, *codes: str) -> str:
+    return "".join(codes) + str(text) + RESET
+
+
 def bar(pct: float, width: int = 24) -> str:
-    pct   = max(0.0, min(100.0, pct))
-    fill  = round(pct / 100 * width)
+    pct = max(0.0, min(100.0, pct))
+    fill = round(pct / 100 * width)
     empty = width - fill
     if pct >= 85:
-        color = RED
+        line_color = RED
     elif pct >= 60:
-        color = YELLOW
+        line_color = YELLOW
     else:
-        color = GREEN
-    return color + "█" * fill + DIM + "░" * empty + RESET
+        line_color = GREEN
+    return line_color + "#" * fill + DIM + "." * empty + RESET
 
 
-# ── Display ───────────────────────────────────────────────────────────────────
-def display(data: dict):
+def display(data: dict) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     print()
-    print(c("  ╔══════════════════════════════════════╗", CYAN, BOLD))
-    print(c("  ║         CLAUDE USAGE CHECKER         ║", CYAN, BOLD))
-    print(c("  ╚══════════════════════════════════════╝", CYAN, BOLD))
-    print(f"  {c(now, DIM)}")
+    print(color("  CLAUDE USAGE CHECKER", CYAN, BOLD))
+    print(color(f"  {now}", DIM))
     print()
 
-    if isinstance(data, dict):
-        session = data.get("five_hour") or {}
-        weekly  = data.get("seven_day") or {}
-        _print_meter("Session (5hr)", session)
-        _print_meter("Weekly  (7day)", weekly)
-    else:
-        print(f"  {c('Unexpected response:', YELLOW)} {data}")
+    if not isinstance(data, dict):
+        print(f"  {color('Unexpected response:', YELLOW)} {data}")
+        return
 
-    print()
-    print(c("  ════════════════════════════════════════", DIM))
+    _print_meter("Session (5hr)", data.get("five_hour") or {})
+    _print_meter("Weekly  (7day)", data.get("seven_day") or {})
     print()
 
 
@@ -72,7 +70,7 @@ def _resets_in(resets_at: str) -> str:
     if not resets_at:
         return ""
     try:
-        dt   = datetime.fromisoformat(resets_at)
+        dt = datetime.fromisoformat(resets_at)
         diff = dt - datetime.now(timezone.utc)
         mins = max(0, int(diff.total_seconds() / 60))
         if mins < 60:
@@ -83,28 +81,26 @@ def _resets_in(resets_at: str) -> str:
         return resets_at
 
 
-def _print_meter(label: str, obj: dict):
+def _print_meter(label: str, obj: dict) -> None:
     if not obj:
+        print(f"  {color(label, BOLD):<20}  {color('No data returned', YELLOW)}")
         return
 
-    pct    = float(obj.get("utilization") or 0)
+    pct = float(obj.get("utilization") or 0)
     resets = _resets_in(obj.get("resets_at") or "")
-
-    b = bar(float(pct))
     pct_str = f"{pct:5.1f}%"
 
-    if float(pct) >= 85:
-        pct_colored = c(pct_str, RED, BOLD)
-    elif float(pct) >= 60:
-        pct_colored = c(pct_str, YELLOW, BOLD)
+    if pct >= 85:
+        pct_colored = color(pct_str, RED, BOLD)
+    elif pct >= 60:
+        pct_colored = color(pct_str, YELLOW, BOLD)
     else:
-        pct_colored = c(pct_str, GREEN, BOLD)
+        pct_colored = color(pct_str, GREEN, BOLD)
 
-    reset_str = f"  {c('resets in ' + str(resets), DIM)}" if resets else ""
-    print(f"  {c(label, BOLD):<20}  {b}  {pct_colored}{reset_str}")
+    reset_str = f"  {color('resets in ' + resets, DIM)}" if resets else ""
+    print(f"  {color(label, BOLD):<20}  {bar(pct)}  {pct_colored}{reset_str}")
 
 
-# ── Browser JS payload ────────────────────────────────────────────────────────
 JS = """
 async ({ orgOverride }) => {
     function getCookie(name) {
@@ -118,7 +114,9 @@ async ({ orgOverride }) => {
     }
 
     const orgId = orgOverride || getCookie("lastActiveOrg") || null;
-    if (!orgId) return { error: "Could not determine org ID. Set CLAUDE_ORG_ID env var." };
+    if (!orgId) {
+        return { error: "Could not determine org ID. Set CLAUDE_ORG_ID env var." };
+    }
 
     const url = `/api/organizations/${orgId}/usage`;
     let resp;
@@ -141,60 +139,65 @@ async ({ orgOverride }) => {
 """
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-def main():
+def fetch_usage(playwright: Playwright) -> dict:
+    ctx = playwright.chromium.launch_persistent_context(
+        user_data_dir=str(PROFILE_DIR),
+        headless=False,
+        viewport={"width": 1100, "height": 750},
+        args=["--disable-blink-features=AutomationControlled"],
+    )
+
+    try:
+        page = ctx.new_page()
+        print(color("  Opening claude.ai/settings/usage...", DIM))
+        page.goto(USAGE_URL, wait_until="load", timeout=60000)
+
+        if "login" in page.url.lower() or page.locator("input[type=email]").count() > 0:
+            print()
+            print(color("  Log in using the browser window that opened.", YELLOW, BOLD))
+            print(color("  Then navigate to claude.ai/settings/usage.", YELLOW))
+            input(color("\n  Press ENTER once the usage page is loaded... ", WHITE))
+
+        print(color("\n  Fetching usage data...", DIM))
+        return page.evaluate(JS, {"orgOverride": ORG_OVERRIDE})
+    finally:
+        ctx.close()
+
+
+def main() -> int:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(c("\n  Starting browser...", DIM))
+    print(color("\n  Starting browser...", DIM))
 
-    with sync_playwright() as p:
-        ctx = p.chromium.launch_persistent_context(
-            user_data_dir=str(PROFILE_DIR),
-            headless=False,
-            viewport={"width": 1100, "height": 750},
-            args=["--disable-blink-features=AutomationControlled"],
-        )
+    try:
+        with sync_playwright() as playwright:
+            result = fetch_usage(playwright)
+    except Exception as exc:
+        print(color(f"\n  Error: {exc}", RED, BOLD))
+        return 1
 
-        page = ctx.new_page()
-        print(c("  Opening claude.ai/settings/usage...", DIM))
-        page.goto("https://claude.ai/settings/usage", wait_until="load", timeout=60000)
-
-        # If not logged in, wait for user
-        if "login" in page.url.lower() or page.locator("input[type=email]").count() > 0:
-            print()
-            print(c("  Log in using the browser window that opened.", YELLOW, BOLD))
-            print(c("  Then navigate to claude.ai/settings/usage.", YELLOW))
-            input(c("\n  Press ENTER once the usage page is loaded... ", WHITE))
-
-        print(c("\n  Fetching usage data...", DIM))
-
-        result = page.evaluate(JS, {"orgOverride": ORG_OVERRIDE})
-        ctx.close()
-
-    # Handle errors
     if "error" in result:
-        print(c(f"\n  Error: {result['error']}", RED, BOLD))
-        sys.exit(1)
+        print(color(f"\n  Error: {result['error']}", RED, BOLD))
+        return 1
 
     if not result.get("ok"):
-        print(c(f"\n  API returned {result['status']}", RED, BOLD))
+        print(color(f"\n  API returned {result['status']}", RED, BOLD))
         print(json.dumps(result.get("body"), indent=2))
-        sys.exit(1)
+        return 1
 
     data = result["body"]
-
-    # Display
     display(data)
 
-    # Save to history
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = OUTPUT_DIR / f"usage_{ts}.json"
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"fetched_at": ts, "org_id": result["orgId"], "data": data}, f, indent=2)
-    print(c(f"  Saved → {path}", DIM))
+
+    print(color(f"  Saved -> {path}", DIM))
     print()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

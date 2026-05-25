@@ -89,7 +89,16 @@ To build a local executable:
 .\build.ps1
 ```
 
-The build script creates `dist\ClaudeUsageWidget.exe`, signs it with a local self-signed certificate, and attempts to add a Windows Defender exclusion for that executable path.
+The build script creates:
+
+```text
+dist\ClaudeUsageChecker.exe
+dist\ClaudeUsageWidget.exe
+```
+
+It signs both files with a local self-signed certificate and attempts to add Windows Defender exclusions for those executable paths. Run the checker once first so you can log in, then open the widget.
+
+Note: the checker executable still uses Playwright Chromium. The build script installs Chromium on the build machine, and a fresh desktop may need `playwright install chromium` or the full Playwright browser cache copied/installed before first use.
 
 ## Manual Org ID
 

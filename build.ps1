@@ -1,38 +1,44 @@
 #Requires -Version 5.1
-# Build ClaudeUsageWidget.exe and make it trusted on this Windows 11 machine.
-# Run once. Subsequent runs reuse the same cert. No admin rights needed.
+# Build ClaudeUsageChecker.exe and ClaudeUsageWidget.exe for this Windows machine.
+# The checker exe contains the Python app code; Chromium is still installed by Playwright.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$EXE_NAME     = "ClaudeUsageWidget"
-$DIST_DIR     = Join-Path $PSScriptRoot "dist"
-$EXE_PATH     = Join-Path $DIST_DIR "$EXE_NAME.exe"
-$CERT_SUBJECT = "CN=Claude Usage Widget, O=Personal Tool"
+$DIST_DIR = Join-Path $PSScriptRoot "dist"
+$BUILD_DIR = Join-Path $PSScriptRoot "build"
+$CHECKER_EXE = Join-Path $DIST_DIR "ClaudeUsageChecker.exe"
+$WIDGET_EXE = Join-Path $DIST_DIR "ClaudeUsageWidget.exe"
+$CERT_SUBJECT = "CN=Claude Usage Tools, O=Personal Tool"
 
 function Step($n, $msg) { Write-Host "[${n}/6] $msg" -ForegroundColor Cyan }
-function OK($msg)        { Write-Host "  OK   $msg" -ForegroundColor Green }
-function WARN($msg)      { Write-Host "  WARN $msg" -ForegroundColor Yellow }
+function OK($msg) { Write-Host "  OK   $msg" -ForegroundColor Green }
+function WARN($msg) { Write-Host "  WARN $msg" -ForegroundColor Yellow }
 
-# 1 - Install PyInstaller
-Step 1 "Installing PyInstaller"
-pip install pyinstaller --quiet
-OK "PyInstaller ready"
+Step 1 "Installing build dependencies"
+python -m pip install --upgrade pip --quiet
+python -m pip install -r requirements.txt pyinstaller --quiet
+OK "Dependencies ready"
 
-# 2 - Build EXE
-Step 2 "Building exe with PyInstaller"
+Step 2 "Ensuring Playwright Chromium is installed"
+python -m playwright install chromium
+OK "Playwright Chromium ready"
+
+Step 3 "Building executables with PyInstaller"
 Push-Location $PSScriptRoot
-pyinstaller widget.spec --distpath dist --workpath build --clean --noconfirm
+python -m PyInstaller check_usage.spec --distpath $DIST_DIR --workpath $BUILD_DIR --clean --noconfirm
+python -m PyInstaller widget.spec --distpath $DIST_DIR --workpath $BUILD_DIR --clean --noconfirm
 Pop-Location
 
-if (-not (Test-Path $EXE_PATH)) {
-    throw "Build failed - $EXE_PATH not found."
+foreach ($path in @($CHECKER_EXE, $WIDGET_EXE)) {
+    if (-not (Test-Path $path)) {
+        throw "Build failed - $path not found."
+    }
+    $sizeMB = [Math]::Round((Get-Item $path).Length / 1MB, 1)
+    OK "Built: $path (${sizeMB} MB)"
 }
-$sizeMB = [Math]::Round((Get-Item $EXE_PATH).Length / 1MB, 1)
-OK "Built: $EXE_PATH (${sizeMB} MB)"
 
-# 3 - Self-signed code-signing certificate
-Step 3 "Creating or reusing self-signed certificate"
+Step 4 "Creating or reusing self-signed certificate"
 $cert = Get-ChildItem Cert:\CurrentUser\My |
         Where-Object { $_.Subject -eq $CERT_SUBJECT -and $_.HasPrivateKey } |
         Sort-Object NotAfter -Descending |
@@ -40,7 +46,7 @@ $cert = Get-ChildItem Cert:\CurrentUser\My |
 
 if ($cert) {
     $expiry = $cert.NotAfter.ToString("yyyy-MM-dd")
-    OK "Reusing existing cert $($cert.Thumbprint) expires $expiry"
+    OK "Reusing existing cert $($cert.Thumbprint), expires $expiry"
 } else {
     $cert = New-SelfSignedCertificate `
         -Type CodeSigning `
@@ -53,24 +59,7 @@ if ($cert) {
     OK "Created cert $($cert.Thumbprint)"
 }
 
-# 4 - Sign the EXE
-Step 4 "Signing the exe"
-
-$sig = Set-AuthenticodeSignature `
-    -FilePath $EXE_PATH `
-    -Certificate $cert `
-    -TimestampServer "http://timestamp.digicert.com" `
-    -HashAlgorithm SHA256
-
-if ($sig.Status -eq "Valid") {
-    OK "Signed with SHA-256 + RFC3161 timestamp (Set-AuthenticodeSignature)"
-} else {
-    WARN "Signing status: $($sig.Status) - $($sig.StatusMessage)"
-}
-
-# 5 - Trust the certificate on this machine
-Step 5 "Adding cert to Trusted Publishers + Root (CurrentUser)"
-
+Step 5 "Trusting local certificate"
 function Add-CertToStore($storeName, $storeScope) {
     $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($storeName, $storeScope)
     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
@@ -79,22 +68,36 @@ function Add-CertToStore($storeName, $storeScope) {
 }
 
 Add-CertToStore "TrustedPublisher" "CurrentUser"
-OK "Added to CurrentUser\TrustedPublisher"
-
 Add-CertToStore "Root" "CurrentUser"
-OK "Added to CurrentUser\Root (validates certificate chain)"
+OK "Added certificate to CurrentUser trusted stores"
 
-# 6 - Windows Defender exclusion
-Step 6 "Adding Windows Defender path exclusion"
-try {
-    Add-MpPreference -ExclusionPath $EXE_PATH -ErrorAction Stop
-    OK "Defender exclusion added for $EXE_PATH"
-} catch {
-    WARN "Could not add Defender exclusion (may need admin): $_"
-    WARN "If blocked: right-click the exe, Properties, Unblock."
+Step 6 "Signing executables and adding Defender exclusions"
+foreach ($path in @($CHECKER_EXE, $WIDGET_EXE)) {
+    $sig = Set-AuthenticodeSignature `
+        -FilePath $path `
+        -Certificate $cert `
+        -TimestampServer "http://timestamp.digicert.com" `
+        -HashAlgorithm SHA256
+
+    if ($sig.Status -eq "Valid") {
+        OK "Signed $([System.IO.Path]::GetFileName($path))"
+    } else {
+        WARN "Signing status for $path`: $($sig.Status) - $($sig.StatusMessage)"
+    }
+}
+
+foreach ($path in @($CHECKER_EXE, $WIDGET_EXE)) {
+    try {
+        Add-MpPreference -ExclusionPath $path -ErrorAction Stop
+        OK "Defender exclusion added for $path"
+    } catch {
+        WARN "Could not add Defender exclusion for $path (may need admin): $_"
+    }
 }
 
 Write-Host ""
-Write-Host "Build complete: $EXE_PATH" -ForegroundColor Green
-Write-Host "Windows will trust this exe on this machine." -ForegroundColor Green
-Write-Host "Run with: .\dist\ClaudeUsageWidget.exe" -ForegroundColor Green
+Write-Host "Build complete:" -ForegroundColor Green
+Write-Host "  $CHECKER_EXE" -ForegroundColor Green
+Write-Host "  $WIDGET_EXE" -ForegroundColor Green
+Write-Host ""
+Write-Host "Run the checker once first, then launch the widget." -ForegroundColor Green
