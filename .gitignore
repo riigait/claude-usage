@@ -1,0 +1,18 @@
+# Browser session - contains login cookies, never commit
+~/.claude-usage/
+claude_browser_profile/
+claude_usage_output/
+
+# Build artifacts
+build/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Output history
+history/
+*.json
