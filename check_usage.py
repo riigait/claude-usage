@@ -14,6 +14,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+if getattr(sys, "frozen", False) and "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+    local_app_data = os.getenv("LOCALAPPDATA")
+    if local_app_data:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(local_app_data) / "ms-playwright")
+
 from playwright.sync_api import Playwright, sync_playwright
 
 
@@ -34,6 +39,11 @@ WHITE = "\033[97m"
 
 def color(text: object, *codes: str) -> str:
     return "".join(codes) + str(text) + RESET
+
+
+def safe_console_text(text: object) -> str:
+    encoding = sys.stdout.encoding or "utf-8"
+    return str(text).encode(encoding, errors="replace").decode(encoding)
 
 
 def bar(pct: float, width: int = 24) -> str:
@@ -174,7 +184,10 @@ def main() -> int:
         with sync_playwright() as playwright:
             result = fetch_usage(playwright)
     except Exception as exc:
-        print(color(f"\n  Error: {exc}", RED, BOLD))
+        print(color(f"\n  Error: {safe_console_text(exc)}", RED, BOLD))
+        print()
+        print("  If this is a Playwright browser error, run:")
+        print("    python -m playwright install chromium")
         return 1
 
     if "error" in result:
