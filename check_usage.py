@@ -26,6 +26,7 @@ PROFILE_DIR = Path.home() / ".claude-usage" / "browser-profile"
 OUTPUT_DIR = Path.home() / ".claude-usage" / "history"
 ORG_OVERRIDE = os.getenv("CLAUDE_ORG_ID", "")
 USAGE_URL = "https://claude.ai/settings/usage"
+HEADLESS = os.getenv("CLAUDE_USAGE_HEADLESS", "").lower() in {"1", "true", "yes", "on"}
 
 RESET = "\033[0m"
 BOLD = "\033[1m"
@@ -152,7 +153,7 @@ async ({ orgOverride }) => {
 def fetch_usage(playwright: Playwright) -> dict:
     ctx = playwright.chromium.launch_persistent_context(
         user_data_dir=str(PROFILE_DIR),
-        headless=False,
+        headless=HEADLESS,
         viewport={"width": 1100, "height": 750},
         args=["--disable-blink-features=AutomationControlled"],
     )
@@ -163,6 +164,8 @@ def fetch_usage(playwright: Playwright) -> dict:
         page.goto(USAGE_URL, wait_until="load", timeout=60000)
 
         if "login" in page.url.lower() or page.locator("input[type=email]").count() > 0:
+            if HEADLESS:
+                return { "error": "Login required. Run ClaudeUsageChecker.exe once to refresh your session." }
             print()
             print(color("  Log in using the browser window that opened.", YELLOW, BOLD))
             print(color("  Then navigate to claude.ai/settings/usage.", YELLOW))

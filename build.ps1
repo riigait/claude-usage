@@ -1,14 +1,14 @@
 #Requires -Version 5.1
-# Build ClaudeUsageChecker.exe and ClaudeUsageWidget.exe for this Windows machine.
-# The checker exe contains the Python app code; Chromium is still installed by Playwright.
+# Build ClaudeUsage.exe for this Windows machine.
+# Single executable: opens widget by default, runs checker with --check flag.
+# Chromium is still installed separately by Playwright.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $DIST_DIR = Join-Path $PSScriptRoot "dist"
 $BUILD_DIR = Join-Path $PSScriptRoot "build"
-$CHECKER_EXE = Join-Path $DIST_DIR "ClaudeUsageChecker.exe"
-$WIDGET_EXE = Join-Path $DIST_DIR "ClaudeUsageWidget.exe"
+$APP_EXE = Join-Path $DIST_DIR "ClaudeUsage.exe"
 $CERT_SUBJECT = "CN=Claude Usage Tools, O=Personal Tool"
 
 function Step($n, $msg) { Write-Host "[${n}/6] $msg" -ForegroundColor Cyan }
@@ -24,19 +24,16 @@ Step 2 "Ensuring Playwright Chromium is installed"
 python -m playwright install chromium
 OK "Playwright Chromium ready"
 
-Step 3 "Building executables with PyInstaller"
+Step 3 "Building executable with PyInstaller"
 Push-Location $PSScriptRoot
-python -m PyInstaller check_usage.spec --distpath $DIST_DIR --workpath $BUILD_DIR --clean --noconfirm
-python -m PyInstaller widget.spec --distpath $DIST_DIR --workpath $BUILD_DIR --clean --noconfirm
+python -m PyInstaller claude_usage.spec --distpath $DIST_DIR --workpath $BUILD_DIR --clean --noconfirm
 Pop-Location
 
-foreach ($path in @($CHECKER_EXE, $WIDGET_EXE)) {
-    if (-not (Test-Path $path)) {
-        throw "Build failed - $path not found."
-    }
-    $sizeMB = [Math]::Round((Get-Item $path).Length / 1MB, 1)
-    OK "Built: $path (${sizeMB} MB)"
+if (-not (Test-Path $APP_EXE)) {
+    throw "Build failed - $APP_EXE not found."
 }
+$sizeMB = [Math]::Round((Get-Item $APP_EXE).Length / 1MB, 1)
+OK "Built: $APP_EXE (${sizeMB} MB)"
 
 Step 4 "Creating or reusing self-signed certificate"
 $cert = Get-ChildItem Cert:\CurrentUser\My |
@@ -71,33 +68,28 @@ Add-CertToStore "TrustedPublisher" "CurrentUser"
 Add-CertToStore "Root" "CurrentUser"
 OK "Added certificate to CurrentUser trusted stores"
 
-Step 6 "Signing executables and adding Defender exclusions"
-foreach ($path in @($CHECKER_EXE, $WIDGET_EXE)) {
-    $sig = Set-AuthenticodeSignature `
-        -FilePath $path `
-        -Certificate $cert `
-        -TimestampServer "http://timestamp.digicert.com" `
-        -HashAlgorithm SHA256
+Step 6 "Signing executable and adding Defender exclusion"
+$sig = Set-AuthenticodeSignature `
+    -FilePath $APP_EXE `
+    -Certificate $cert `
+    -TimestampServer "http://timestamp.digicert.com" `
+    -HashAlgorithm SHA256
 
-    if ($sig.Status -eq "Valid") {
-        OK "Signed $([System.IO.Path]::GetFileName($path))"
-    } else {
-        WARN "Signing status for $path`: $($sig.Status) - $($sig.StatusMessage)"
-    }
+if ($sig.Status -eq "Valid") {
+    OK "Signed $([System.IO.Path]::GetFileName($APP_EXE))"
+} else {
+    WARN "Signing status for $APP_EXE`: $($sig.Status) - $($sig.StatusMessage)"
 }
 
-foreach ($path in @($CHECKER_EXE, $WIDGET_EXE)) {
-    try {
-        Add-MpPreference -ExclusionPath $path -ErrorAction Stop
-        OK "Defender exclusion added for $path"
-    } catch {
-        WARN "Could not add Defender exclusion for $path (may need admin): $_"
-    }
+try {
+    Add-MpPreference -ExclusionPath $APP_EXE -ErrorAction Stop
+    OK "Defender exclusion added for $APP_EXE"
+} catch {
+    WARN "Could not add Defender exclusion for $APP_EXE (may need admin): $_"
 }
 
 Write-Host ""
 Write-Host "Build complete:" -ForegroundColor Green
-Write-Host "  $CHECKER_EXE" -ForegroundColor Green
-Write-Host "  $WIDGET_EXE" -ForegroundColor Green
+Write-Host "  $APP_EXE" -ForegroundColor Green
 Write-Host ""
-Write-Host "Run the checker once first, then launch the widget." -ForegroundColor Green
+Write-Host "Run 'ClaudeUsage.exe --check' once first to log in, then launch ClaudeUsage.exe for the widget." -ForegroundColor Green

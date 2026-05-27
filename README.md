@@ -38,9 +38,11 @@ It is useful when you want to:
 
 - Terminal usage meter for Claude session and weekly limits.
 - First-run browser login, then persistent local session reuse.
+- Headless mode for silent background refreshes (`CLAUDE_USAGE_HEADLESS=1`).
 - Optional `CLAUDE_ORG_ID` override for accounts where auto-detection fails.
 - Timestamped JSON history under your home directory.
-- Optional CustomTkinter desktop widget.
+- Optional CustomTkinter desktop widget with auto-refresh.
+- Widget refresh runs silently — no console window popup on Windows.
 - Windows build script for creating local checker and widget executables.
 - No API key required.
 
@@ -73,9 +75,28 @@ Usage history is written to:
 ~/.claude-usage/history/
 ```
 
+## Headless Mode
+
+Set `CLAUDE_USAGE_HEADLESS=1` to run the checker without opening a visible browser window. This is used automatically by the desktop widget when it refreshes.
+
+Windows PowerShell:
+
+```powershell
+$env:CLAUDE_USAGE_HEADLESS = "1"
+python check_usage.py
+```
+
+macOS/Linux:
+
+```bash
+CLAUDE_USAGE_HEADLESS=1 python check_usage.py
+```
+
+If your session has expired, headless mode returns an error and exits. Run the checker once without the flag to log in and refresh your saved browser profile.
+
 ## Desktop Widget
 
-The widget reads the latest saved usage JSON and can refresh the checker for you.
+The widget reads the latest saved usage JSON and automatically refreshes the checker on a 5-minute interval. It also lets you trigger a manual refresh at any time.
 
 ```bash
 python widget.py
@@ -87,6 +108,8 @@ On Windows, you can also use:
 .\launch-widget.bat
 ```
 
+The widget refreshes silently — no console window appears during background checks.
+
 To build a local executable:
 
 ```powershell
@@ -96,11 +119,10 @@ To build a local executable:
 The build script creates:
 
 ```text
-dist\ClaudeUsageChecker.exe
-dist\ClaudeUsageWidget.exe
+dist\ClaudeUsage.exe
 ```
 
-It signs both files with a local self-signed certificate and attempts to add Windows Defender exclusions for those executable paths. Run the checker once first so you can log in, then open the widget.
+It signs the file with a local self-signed certificate and attempts to add a Windows Defender exclusion for it. Run `ClaudeUsage.exe --check` once first so you can log in, then launch `ClaudeUsage.exe` to open the widget.
 
 Note: the checker executable still uses Playwright Chromium. The build script installs Chromium on the build machine. On a fresh desktop, Chromium must also exist in that user's Playwright browser cache at `%LOCALAPPDATA%\ms-playwright`; the simplest path is installing Python dependencies and running `playwright install chromium` once before launching the executable.
 
@@ -134,6 +156,8 @@ https://claude.ai/settings/usage
 
 Once authenticated, it runs a small script inside the browser page to request the same usage endpoint Claude uses. The result is displayed in the terminal and saved locally as JSON.
 
+The widget runs the checker in headless mode (`CLAUDE_USAGE_HEADLESS=1`) so refreshes happen silently in the background. On Windows, the subprocess runs with `CREATE_NO_WINDOW` so no console window flashes during auto-refresh.
+
 ## Privacy And Safety
 
 This tool uses your real Claude browser session.
@@ -156,12 +180,13 @@ playwright install chromium
 
 If the tool cannot find your organization:
 
-```bash
-# PowerShell
+```powershell
 $env:CLAUDE_ORG_ID = "your-org-id-here"
 ```
 
 If the request returns an error, open the browser window and confirm you are logged in to Claude.ai and can view the usage page manually.
+
+If headless mode says "Login required", run the checker once without `CLAUDE_USAGE_HEADLESS` to refresh your saved session.
 
 If the widget shows no data, run `python check_usage.py` once first so it has a JSON file to read.
 
@@ -169,13 +194,15 @@ If the widget shows no data, run `python check_usage.py` once first so it has a 
 
 ```text
 check_usage.py              Terminal usage checker
-widget.py                   Desktop widget
+widget.py                   Desktop widget with auto-refresh
+claude_usage.py             Combined entry point (--check = checker, no args = widget)
 launch-widget.bat           Windows launcher for the widget
 build.ps1                   Windows executable build/sign helper
 add-defender-exclusion.ps1  Optional Defender exclusion helper for built executables
 requirements.txt            Python dependencies
-check_usage.spec            PyInstaller spec for the checker
-widget.spec                 PyInstaller spec
+claude_usage.spec           PyInstaller spec for the combined executable
+check_usage.spec            PyInstaller spec for the standalone checker
+widget.spec                 PyInstaller spec for the standalone widget
 version_info.txt            Windows executable metadata
 ```
 

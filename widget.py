@@ -8,6 +8,7 @@ It reads JSON saved by check_usage.py and can refresh by running the checker.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -62,15 +63,12 @@ def load_latest() -> dict | None:
 
 def checker_command() -> list[str]:
     if getattr(sys, "frozen", False):
-        base_dir = Path(sys.executable).resolve().parent
-        checker_exe = base_dir / "ClaudeUsageChecker.exe"
-        if checker_exe.exists():
-            return [str(checker_exe)]
+        return [sys.executable, "--check"]
 
     pythonw = shutil.which("pythonw")
     python = pythonw or shutil.which("python") or shutil.which("python3") or shutil.which("py")
     if not python:
-        raise RuntimeError("Python was not found. Install Python 3 or place ClaudeUsageChecker.exe beside the widget.")
+        raise RuntimeError("Python was not found. Install Python 3.")
     return [python, str(SCRIPT_PATH)]
 
 
@@ -248,16 +246,30 @@ class ClaudeWidget(ctk.CTk):
         self.status_label.configure(text=f"Updated {ts}" if ts else "Updated")
 
     def _on_refresh(self) -> None:
+        self._start_refresh("Fetching usage...", headless=True)
+
+    def _start_refresh(self, status: str, headless: bool = True) -> bool:
         if self._refreshing:
-            return
+            return False
         self._refreshing = True
         self.refresh_btn.configure(text="...", state="disabled")
-        self.status_label.configure(text="Fetching usage...")
-        threading.Thread(target=self._run_script, daemon=True).start()
+        self.status_label.configure(text=status)
+        threading.Thread(target=self._run_script, args=(headless,), daemon=True).start()
+        return True
 
-    def _run_script(self) -> None:
+    def _run_script(self, headless: bool = True) -> None:
         try:
-            subprocess.run(checker_command(), timeout=180, check=False)
+            env = os.environ.copy()
+            if headless:
+                env["CLAUDE_USAGE_HEADLESS"] = "1"
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if headless else 0
+            subprocess.run(
+                checker_command(),
+                timeout=180,
+                check=False,
+                env=env,
+                creationflags=creationflags,
+            )
         except Exception as exc:
             self.after(0, lambda: self.status_label.configure(text=f"Error: {exc}"))
         finally:
@@ -269,7 +281,8 @@ class ClaudeWidget(ctk.CTk):
         self.refresh_data()
 
     def _schedule_auto_check(self) -> None:
-        self.refresh_data()
+        if not self._refreshing:
+            self._start_refresh("Checking usage...", headless=True)
         self.after(REFRESH_SECS * 1000, self._schedule_auto_check)
 
 
