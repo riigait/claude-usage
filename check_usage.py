@@ -81,7 +81,9 @@ def _resets_in(resets_at: str) -> str:
     if not resets_at:
         return ""
     try:
-        dt = datetime.fromisoformat(resets_at)
+        dt = datetime.fromisoformat(resets_at.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         diff = dt - datetime.now(timezone.utc)
         mins = max(0, int(diff.total_seconds() / 60))
         if mins < 60:

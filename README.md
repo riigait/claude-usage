@@ -1,229 +1,281 @@
 # Claude Usage Checker
 
-Track your Claude.ai usage from your own logged-in browser session.
+Track your Claude.ai session and weekly usage limits from your own logged-in browser session.
 
-Claude Usage Checker is a small Python tool that opens Claude in Playwright, reuses your browser login, fetches the usage data shown by Claude, and prints a clean terminal dashboard. It also saves each result as JSON so you can keep a local history, and includes an optional desktop widget for an always-visible glance at your current session and weekly usage.
+Claude Usage Checker is a lightweight Python tool that opens Claude in Playwright, reuses your browser login, fetches live usage data from Claude's internal API, and displays it in a clean terminal dashboard or optional desktop widget. Usage snapshots are automatically saved locally as JSON for history and tracking.
 
-> This project is unofficial and is not affiliated with Anthropic.
+> **Unofficial tool** — not affiliated with Anthropic. Depends on Claude.ai's internal `/api/organizations/{orgId}/usage` endpoint; may break if Claude changes its web app.
 
-## Install Guides
+## Quick Links
 
-- [Windows, macOS, and Ubuntu Desktop setup](INSTALL_OS.md)
+- **[Installation Guide](INSTALL_OS.md)** — Windows, macOS, Ubuntu
+- **[Contributing](CONTRIBUTING.md)** — Report bugs, suggest features
+- **[Security & Privacy](SECURITY.md)** — How your data is handled
 
-## Why This Exists
+## Why Use This
 
-Claude's usage limits matter most when you are deep in a work session. This tool gives you a fast local check without manually opening settings, clicking around, or guessing how close you are to the next reset.
+Claude's usage limits reset on a schedule and matter most when you're deep in a work session. This tool gives you a fast local check without:
 
-It is useful when you want to:
+- Manually opening settings and navigating to the usage page
+- Memorizing reset times
+- Paying for or trusting external dashboards
+- Sharing API keys
 
-- See session and weekly usage in one command.
-- Know when your limits reset.
-- Keep a timestamped local usage history.
-- Use a tiny desktop widget while working.
-- Avoid API keys, paid dashboards, or cloud sync.
+It's useful when you want to:
+
+- See session (5-hour) and weekly (7-day) usage in one command
+- Know exactly when your limits reset
+- Keep a timestamped local history of usage over time
+- Use a tiny always-on-top desktop widget while working
+- Avoid cloud sync, API keys, or third-party services
 
 ## Preview
 
+**Terminal Dashboard:**
+
 ```text
   CLAUDE USAGE CHECKER
-  2026-05-25 14:32:01
+  2026-05-28 14:32:01
 
   Session (5hr)        ##################......   75.0%  resets in 1h
   Weekly  (7day)       ##########..............   42.0%  resets in 3d
 
-  Saved -> C:\Users\you\.claude-usage\history\usage_20260525_143201.json
+  Saved -> /home/user/.claude-usage/history/usage_20260528_143201.json
 ```
 
-## Features
+**Desktop Widget:**
+A frameless, always-on-top window showing both meters with one-click refresh and auto-refresh every 5 minutes.
 
-- Terminal usage meter for Claude session and weekly limits.
-- First-run browser login, then persistent local session reuse.
-- Headless mode for silent background refreshes (`CLAUDE_USAGE_HEADLESS=1`).
-- Optional `CLAUDE_ORG_ID` override for accounts where auto-detection fails.
-- Timestamped JSON history under your home directory.
-- Optional CustomTkinter desktop widget with auto-refresh.
-- Widget refresh runs silently — no console window popup on Windows.
-- Windows build script for creating local checker and widget executables.
-- No API key required.
+## Installation
 
-## Requirements
+See **[INSTALL_OS.md](INSTALL_OS.md)** for platform-specific setup (Windows, macOS, Ubuntu).
 
-- Python 3.10 or newer
-- A Claude.ai account
-- Chromium installed by Playwright
+### Requirements
 
-Install dependencies:
+- **Python 3.10 or newer**
+- **A Claude.ai account** (no API key needed)
+- **Chromium** (installed automatically by Playwright)
+
+### Quick Install
 
 ```bash
+# Clone or download this repo
+git clone https://github.com/riigait/claude-usage
+cd claude-usage
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Install Playwright's Chromium (one-time)
 playwright install chromium
 ```
 
-## Quick Start
+## Usage
 
-Run the checker:
+### Terminal Checker
+
+Run the checker to fetch and display your current usage:
 
 ```bash
 python check_usage.py
 ```
 
-On the first run, a browser window opens. Log in to Claude.ai, go to the usage page if needed, then return to the terminal and press Enter. After that, the browser profile is saved locally and future runs can reuse the session.
+**First run:** A browser window opens. Log into Claude.ai and navigate to the usage page if needed. Return to the terminal and press **Enter**. Your login session is saved locally and reused on future runs.
 
-Usage history is written to:
+**After login is saved:** Future runs complete in ~5 seconds with no browser window.
 
-```text
-~/.claude-usage/history/
+Usage history is saved to:
+```
+~/.claude-usage/history/usage_YYYYMMDD_HHMMSS.json
 ```
 
-## Headless Mode
+### Desktop Widget
 
-Set `CLAUDE_USAGE_HEADLESS=1` to run the checker without opening a visible browser window. This is used automatically by the desktop widget when it refreshes.
-
-Windows PowerShell:
-
-```powershell
-$env:CLAUDE_USAGE_HEADLESS = "1"
-python check_usage.py
-```
-
-macOS/Linux:
-
-```bash
-CLAUDE_USAGE_HEADLESS=1 python check_usage.py
-```
-
-If your session has expired, headless mode returns an error and exits. Run the checker once without the flag to log in and refresh your saved browser profile.
-
-## Desktop Widget
-
-The widget reads the latest saved usage JSON and automatically refreshes the checker on a 5-minute interval. It also lets you trigger a manual refresh at any time.
+Launch the widget:
 
 ```bash
 python widget.py
 ```
 
-On Windows, you can also use:
-
+Or on Windows:
 ```powershell
 .\launch-widget.bat
 ```
 
-The widget refreshes silently — no console window appears during background checks.
+**Features:**
+- Always-on-top, frameless window — drag the header to move
+- **Refresh** button — manually update usage on demand
+- **Auto-refresh** — fetches every 5 minutes (silently in background)
+- **X button** — close the widget
+- Displays timestamp of last update below the meters
 
-To build a local executable:
+The widget reads the latest saved JSON file from your history directory. If no data exists, click **Refresh** to fetch it.
+
+### Headless Mode
+
+Run the checker without opening a browser window:
+
+```bash
+# Windows PowerShell
+$env:CLAUDE_USAGE_HEADLESS = "1"
+python check_usage.py
+
+# macOS/Linux
+CLAUDE_USAGE_HEADLESS=1 python check_usage.py
+```
+
+Headless mode is used automatically by the desktop widget when auto-refreshing. If your session has expired, headless mode returns an error. Run the checker normally (without `HEADLESS=1`) to log in again.
+
+### Manual Organization ID Override
+
+If the tool cannot detect your organization ID, set it manually:
+
+```bash
+# Windows PowerShell
+$env:CLAUDE_ORG_ID = "your-org-uuid-here"
+python check_usage.py
+
+# macOS/Linux
+export CLAUDE_ORG_ID="your-org-uuid-here"
+python check_usage.py
+```
+
+Your org ID is a UUID visible in Claude.ai URLs. Contact support if you cannot find it.
+
+## Building Standalone Executables
+
+On Windows, create standalone `.exe` files for distribution or desktop shortcuts:
 
 ```powershell
 .\build.ps1
 ```
 
-The build script creates:
+This creates:
+- `dist\ClaudeUsage.exe` — combined checker + widget in one executable
 
-```text
-dist\ClaudeUsage.exe
-```
+**First use:** Run `ClaudeUsage.exe --check` to log in. After that, launch `ClaudeUsage.exe` to open the widget.
 
-It signs the file with a local self-signed certificate and attempts to add a Windows Defender exclusion for it. Run `ClaudeUsage.exe --check` once first so you can log in, then launch `ClaudeUsage.exe` to open the widget.
+**Requirements on target machine:**
+- Windows 7 or newer
+- Chromium installed in Playwright cache: `%LOCALAPPDATA%\ms-playwright`
+  - Easiest way: install Python + dependencies + run `playwright install chromium` once before using the exe
 
-Note: the checker executable still uses Playwright Chromium. The build script installs Chromium on the build machine. On a fresh desktop, Chromium must also exist in that user's Playwright browser cache at `%LOCALAPPDATA%\ms-playwright`; the simplest path is installing Python dependencies and running `playwright install chromium` once before launching the executable.
-
-## Manual Org ID
-
-If the tool cannot detect your organization ID, set it manually.
-
-Windows PowerShell:
-
-```powershell
-$env:CLAUDE_ORG_ID = "your-org-id-here"
-python check_usage.py
-```
-
-macOS/Linux:
-
-```bash
-export CLAUDE_ORG_ID="your-org-id-here"
-python check_usage.py
-```
-
-You can usually find the org ID in Claude.ai URLs. It looks like a UUID.
+The build script signs the executable with a self-signed certificate and attempts to add a Windows Defender exclusion automatically.
 
 ## How It Works
 
-The checker launches a persistent Chromium profile with Playwright and opens:
+1. **Persistent Browser Session:** Launches a persistent Chromium profile at `~/.claude-usage/browser-profile/` using Playwright. Your login session is saved and reused.
 
-```text
-https://claude.ai/settings/usage
-```
+2. **Usage Fetch:** Opens `https://claude.ai/settings/usage`, authenticates with your saved session, and executes a small JavaScript snippet to request Claude's internal usage endpoint:
+   ```
+   GET /api/organizations/{orgId}/usage
+   ```
 
-Once authenticated, it runs a small script inside the browser page to request the same usage endpoint Claude uses. The result is displayed in the terminal and saved locally as JSON.
+3. **Display & Save:** Renders usage data in the terminal (or widget), calculates reset timers, and saves a JSON snapshot with timestamp.
 
-The widget runs the checker in headless mode (`CLAUDE_USAGE_HEADLESS=1`) so refreshes happen silently in the background. On Windows, the subprocess runs with `CREATE_NO_WINDOW` so no console window flashes during auto-refresh.
+4. **Widget Refresh:** The widget runs the checker in headless mode every 5 minutes. On Windows, background refreshes run with `CREATE_NO_WINDOW` so no console flashes.
 
-## Privacy And Safety
+## Data Storage & Privacy
 
-This tool uses your real Claude browser session.
+Your data stays local. Nothing is sent to external servers:
 
-- Your login cookies stay on your machine.
-- The browser profile is stored outside the repo at `~/.claude-usage/browser-profile/`.
-- Usage history is stored at `~/.claude-usage/history/`.
-- The repo ignores local browser profiles, history, build output, and generated files.
-- Do not commit browser profiles, cookies, history exports, or screenshots that reveal account details.
+- **Browser profile & cookies:** `~/.claude-usage/browser-profile/` (outside this repo)
+- **Usage history:** `~/.claude-usage/history/` (outside this repo)
+- **Local files only** — no cloud sync, no telemetry
 
-Because this relies on an internal Claude endpoint, it may break if Claude changes its web app.
+**Important:** Do not commit or share:
+- Browser profiles (contain login cookies)
+- History files (may contain account/org info)
+- Screenshots showing account details
+
+The repo includes a `.gitignore` entry to prevent accidental commits.
 
 ## Troubleshooting
 
-If Playwright cannot start Chromium:
+### "Playwright error" or "cannot start Chromium"
 
+Install Chromium:
 ```bash
 playwright install chromium
 ```
 
-If the tool cannot find your organization:
+### "Could not determine org ID"
 
+Set the org ID manually:
 ```powershell
-$env:CLAUDE_ORG_ID = "your-org-id-here"
+$env:CLAUDE_ORG_ID = "your-uuid"
+python check_usage.py
 ```
 
-If the request returns an error, open the browser window and confirm you are logged in to Claude.ai and can view the usage page manually.
+Or contact Anthropic support to find your org ID.
 
-If headless mode says "Login required", run the checker once without `CLAUDE_USAGE_HEADLESS` to refresh your saved session.
+### "Login required" in headless mode
 
-If the widget shows no data, run `python check_usage.py` once first so it has a JSON file to read.
+The saved session has expired. Run without headless mode to log in again:
+```bash
+python check_usage.py
+```
+
+Then use headless mode again.
+
+### Widget shows "No data yet"
+
+The widget reads saved JSON files. Run the checker once first:
+```bash
+python check_usage.py
+```
+
+Then click **Refresh** in the widget.
+
+### Widget refresh freezes or takes >30 seconds
+
+Browser automation can be slow on slower machines or with network latency. This is normal. Refresh timeout is 180 seconds.
+
+### "Login required" after navigating in browser
+
+If you manually navigate away from the usage page during login, the session may not save correctly. Close the browser, delete `~/.claude-usage/browser-profile/`, and run the checker again.
 
 ## Project Structure
 
-```text
-check_usage.py              Terminal usage checker
-widget.py                   Desktop widget with auto-refresh
-claude_usage.py             Combined entry point (--check = checker, no args = widget)
-launch-widget.bat           Windows launcher for the widget
-build.ps1                   Windows executable build/sign helper
-add-defender-exclusion.ps1  Optional Defender exclusion helper for built executables
-requirements.txt            Python dependencies
-claude_usage.spec           PyInstaller spec for the combined executable
-check_usage.spec            PyInstaller spec for the standalone checker
-widget.spec                 PyInstaller spec for the standalone widget
-version_info.txt            Windows executable metadata
+```
+check_usage.py              Terminal dashboard & fetch logic
+widget.py                   CustomTkinter GUI widget with auto-refresh
+claude_usage.py             Combined entry point (--check or widget mode)
+launch-widget.bat           Windows launcher for widget
+build.ps1                   Build script for standalone Windows exe
+requirements.txt            Python package dependencies
+claude_usage.spec           PyInstaller spec (combined exe)
+check_usage.spec            PyInstaller spec (checker only)
+widget.spec                 PyInstaller spec (widget only)
+version_info.txt            Windows exe metadata
+INSTALL_OS.md               Platform-specific setup guide
+CONTRIBUTING.md             How to contribute
+SECURITY.md                 Privacy & security notes
 ```
 
-## Recommended GitHub Repo Details
+## Known Limitations
 
-Description:
-
-```text
-Track Claude.ai session and weekly usage from your own browser session, with a terminal dashboard and desktop widget.
-```
-
-Topics:
-
-```text
-claude, claude-ai, usage-tracker, playwright, python, desktop-widget, customtkinter, productivity, cli
-```
+- **Depends on internal API:** The tool uses Claude.ai's internal `/api/organizations/{orgId}/usage` endpoint. If Claude changes its web app or moves this endpoint, the tool may break.
+- **Browser-based:** Playwright + Chromium add startup overhead (~3-5s first run, ~1-2s cached).
+- **Session expiry:** Saved browser sessions expire after a period of inactivity. Run the checker normally to refresh.
+- **Org ID detection:** Auto-detection works for most accounts but may fail if you use an org proxy or unconventional setup.
 
 ## Contributing
 
-Issues and pull requests are welcome. Good contributions include clearer setup instructions, platform-specific fixes, safer session handling, cleaner widget UI, and compatibility updates when Claude changes its web app.
+Contributions welcome! Areas for improvement:
+
+- Better org ID auto-detection
+- Clearer error messages
+- Platform-specific testing (ARM Macs, ARM Linux)
+- Widget UI improvements
+- Safer session handling
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
 MIT License. See [LICENSE](LICENSE).
+
+---
+
+**Questions?** Open an issue on GitHub or check [SECURITY.md](SECURITY.md) for privacy concerns.
