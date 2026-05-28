@@ -153,11 +153,17 @@ async ({ orgOverride }) => {
 
 
 def fetch_usage(playwright: Playwright) -> dict:
+    # Always launch non-headless — Cloudflare blocks headless Chromium.
+    # In HEADLESS mode, move the window far off-screen so it's invisible.
+    args = ["--disable-blink-features=AutomationControlled"]
+    if HEADLESS:
+        args += ["--window-position=-32000,-32000"]
+
     ctx = playwright.chromium.launch_persistent_context(
         user_data_dir=str(PROFILE_DIR),
-        headless=HEADLESS,
+        headless=False,
         viewport={"width": 1100, "height": 750},
-        args=["--disable-blink-features=AutomationControlled"],
+        args=args,
     )
 
     try:
