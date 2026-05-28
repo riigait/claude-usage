@@ -16,3 +16,6 @@ venv/
 # Output history
 history/
 *.json
+
+# Markdown files
+SKILLS.md
